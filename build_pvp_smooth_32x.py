@@ -188,11 +188,13 @@ def build_pack() -> None:
     print(f"Generated pack folder: {OUTPUT_DIR}")
 
     # create .mcpack zip
+    # NOTE: zip should contain manifest.json at the archive root (not nested under an extra folder)
     with zipfile.ZipFile(ZIP_FILE, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for file_path in sorted(OUTPUT_DIR.rglob("*")):
             if file_path.is_file():
-                arcname = file_path.relative_to(ROOT)
-                zf.write(file_path, arcname)
+                # make arcname relative to the OUTPUT_DIR so manifest.json is at archive root
+                arcname = file_path.relative_to(OUTPUT_DIR)
+                zf.write(file_path, arcname.as_posix())
     print(f"Generated mcpack archive: {ZIP_FILE}")
 
 
