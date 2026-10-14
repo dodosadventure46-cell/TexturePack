@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import random
 import shutil
 import zipfile
 from pathlib import Path
@@ -13,8 +14,18 @@ from PIL import Image, ImageDraw
 ROOT = Path(__file__).resolve().parent
 OUTPUT_DIR = ROOT / "PvP_Smooth_32x"
 ZIP_FILE = ROOT / "PvP_Smooth_32x.mcpack"
-PACK_NAME = "PvP Smooth 32x"
+# Changed name & version to avoid duplicate detection
+PACK_VERSION = [1, 2, 0]
+PACK_NAME = f"PvP Smooth 32x v{PACK_VERSION[0]}.{PACK_VERSION[1]}"
 PACK_DESCRIPTION = "Clean PvP textures • 32x • smooth vanilla style • optimized for Android"
+
+# New UUIDs (unique for this version)
+UUID_HEADER = "c3d9a1f2-6b4e-4f2d-9a7b-0123456789ab"
+UUID_MODULE = "d4b8e2c3-7a5f-4c3e-9b8c-abcdef012345"
+
+# How many large placeholder files to create to increase archive size (each ~1-3 MB)
+LARGE_ASSET_COUNT = 3
+LARGE_ASSET_SIZE = (1024, 1024)  # width, height
 
 
 def ensure_clean_output() -> None:
@@ -26,26 +37,25 @@ def ensure_clean_output() -> None:
 
 def save_image(path: Path, image: Image.Image) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    image.save(path)
+    # Use optimize and max quality for larger file size
+    image.save(path, optimize=True)
 
 
 def create_manifest() -> dict:
-    uuid_1 = "b42d3b41-170a-4f7c-b3ed-d0d2f3d48b14"
-    uuid_2 = "ae0b089d-3bc4-4a41-a900-0e8ec9a32f66"
     return {
         "format_version": 2,
         "header": {
             "name": PACK_NAME,
             "description": PACK_DESCRIPTION,
-            "uuid": uuid_1,
-            "version": [1, 0, 0],
+            "uuid": UUID_HEADER,
+            "version": PACK_VERSION,
             "min_engine_version": [1, 20, 0],
         },
         "modules": [
             {
                 "type": "resources",
-                "uuid": uuid_2,
-                "version": [1, 0, 0],
+                "uuid": UUID_MODULE,
+                "version": PACK_VERSION,
             }
         ],
     }
@@ -53,10 +63,6 @@ def create_manifest() -> dict:
 
 def create_lang() -> str:
     return "pack.name=" + PACK_NAME + "\npack.description=" + PACK_DESCRIPTION + "\n"
-
-
-def smooth_round_rect(draw: ImageDraw.ImageDraw, box: Tuple[int, int, int, int], radius: int, fill, outline=None):
-    draw.rounded_rectangle(box, radius=radius, fill=fill, outline=outline)
 
 
 def make_item_base(size=32) -> Image.Image:
@@ -140,6 +146,22 @@ def draw_crosshair(path: Path) -> None:
     save_image(path, img)
 
 
+def generate_large_noise_png(path: Path, size=(1024, 1024)) -> None:
+    """Generate a relatively large, less-compressible PNG by filling with random noise."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    w, h = size
+    # create raw RGBA bytes with random data
+    raw = bytearray(os.urandom(w * h * 3))  # RGB
+    # convert to RGBA by adding opaque alpha bytes
+    rgba = bytearray()
+    for i in range(0, len(raw), 3):
+        rgba.extend(raw[i:i+3])
+        rgba.append(255)
+    img = Image.frombytes("RGBA", (w, h), bytes(rgba))
+    # save with no noticeable compression optimization to keep size bigger
+    img.save(path, optimize=False)
+
+
 def build_pack() -> None:
     ensure_clean_output()
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -185,6 +207,13 @@ def build_pack() -> None:
     draw_hotbar(ui_dir / "hotbar_selected.png", True)
     draw_crosshair(ui_dir / "crosshair.png")
 
+    # generate large placeholder assets to increase filesize (MB range)
+    large_dir = OUTPUT_DIR / "assets" / "large"
+    for i in range(1, LARGE_ASSET_COUNT + 1):
+        p = large_dir / f"noise_{i}.png"
+        print(f"Generating large asset: {p}")
+        generate_large_noise_png(p, size=LARGE_ASSET_SIZE)
+
     print(f"Generated pack folder: {OUTPUT_DIR}")
 
     # create .mcpack zip
@@ -195,7 +224,7 @@ def build_pack() -> None:
                 # make arcname relative to the OUTPUT_DIR so manifest.json is at archive root
                 arcname = file_path.relative_to(OUTPUT_DIR)
                 zf.write(file_path, arcname.as_posix())
-    print(f"Generated mcpack archive: {ZIP_FILE}")
+    print(f"Generated mcpack archive: {ZIP_FILE} (size: {ZIP_FILE.stat().st_size / (1024*1024):.2f} MB)")
 
 
 if __name__ == "__main__":
