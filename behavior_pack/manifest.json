@@ -9,7 +9,9 @@
   },
   "modules": [
     {
-      "type": "scripting",
+      "type": "script",
+      "description": "Client-side FPS script module",
+      "language": "javascript",
       "uuid": "a8e7e5b2-4c3f-4d9a-9b2e-18f3b6c4d222",
       "version": [1, 0, 0],
       "entry": "scripts/client/fps_counter.js"
